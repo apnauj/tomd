@@ -30,6 +30,10 @@ tomd = "tomd.cli:app"
 
 [dependency-groups]
 dev = [
+    # The extras are a test-time need: without them the pdf/docx/xlsx converters
+    # raise MissingDependencyException and the suite would not exercise a real
+    # conversion. At runtime they arrive through `uv tool install --with`.
+    "markitdown[all]>=0.1.2",
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "mypy>=1.10",
