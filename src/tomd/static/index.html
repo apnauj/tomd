@@ -183,6 +183,7 @@
   const picker = document.getElementById("picker");
   const limitNote = document.getElementById("limit");
   const PREVIEW_LINES = 40;
+  const CLIPBOARD_TIMEOUT_MS = 1500;
 
   let maxUploadBytes = Infinity;
   let dragDepth = 0;
@@ -300,8 +301,7 @@
     copy.type = "button";
     copy.textContent = "Copy Markdown";
     copy.addEventListener("click", async () => {
-      await navigator.clipboard.writeText(payload.markdown);
-      copy.textContent = "Copied";
+      copy.textContent = (await copyText(payload.markdown)) ? "Copied" : "Copy failed";
       setTimeout(() => { copy.textContent = "Copy Markdown"; }, 1400);
     });
 
@@ -350,6 +350,39 @@
       bundleButton.disabled = false;
     }
   });
+
+  async function copyText(text) {
+    // The clipboard API is refused when the document is not focused, and under
+    // some permission states it neither resolves nor rejects — it simply hangs,
+    // which would leave the button mute forever. Racing it against a timeout
+    // means every click ends in either "Copied" or "Copy failed".
+    const attempt = navigator.clipboard
+      .writeText(text)
+      .then(() => true)
+      .catch(() => false);
+    const timeout = new Promise((resolve) => setTimeout(() => resolve(false), CLIPBOARD_TIMEOUT_MS));
+
+    if (await Promise.race([attempt, timeout])) return true;
+    return copyBySelection(text);
+  }
+
+  function copyBySelection(text) {
+    const field = document.createElement("textarea");
+    field.value = text;
+    field.setAttribute("readonly", "");
+    field.style.position = "fixed";
+    field.style.opacity = "0";
+    document.body.append(field);
+    field.select();
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    }
+    field.remove();
+    return copied;
+  }
 
   function markdownName(name) {
     return name.replace(/\.[^.]+$/, "") + ".md";

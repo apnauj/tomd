@@ -17,11 +17,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Final
-
-from markitdown import MarkItDown
+from typing import TYPE_CHECKING, Final
 
 from tomd import cache, config
+
+if TYPE_CHECKING:
+    from markitdown import MarkItDown
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,7 @@ def convert(
     write: bool = True,
     docintel: bool = False,
     describe_images: bool = False,
+    source_label: str | None = None,
 ) -> ConversionResult:
     """Convert one file to Markdown.
 
@@ -121,6 +123,10 @@ def convert(
             Requires ``$AZURE_DOCINTEL_ENDPOINT``.
         describe_images: Ask an LLM to describe images. Requires
             ``$OPENAI_API_KEY``.
+        source_label: What the front matter should name as the source. The web
+            UI passes the uploaded file's own name here: without it the header
+            would record the temporary staging path, which means nothing to
+            whoever opens the document later.
 
     Returns:
         A :class:`ConversionResult`. On any failure — missing file, unsupported
@@ -141,7 +147,7 @@ def convert(
             if digest is not None:
                 cache.store(digest, body, source=path, variant=variant)
 
-        document = _with_front_matter(body, path) if frontmatter else body
+        document = _with_front_matter(body, path, source_label) if frontmatter else body
         out_path = _write_document(document, path, out) if write else None
     except Exception as exc:  # the whole point of this function is to report, not raise
         logger.debug("conversion of %s failed", path, exc_info=True)
@@ -242,7 +248,13 @@ def _converter(docintel_endpoint: str | None) -> MarkItDown:
 
     Constructing one loads the magika detection model, which costs far more than
     a small conversion, so instances are memoised per back end configuration.
+
+    The import is deferred to here as well. Reaching markitdown pulls in pandas
+    and friends, roughly 600 ms of import time, and a run served entirely from
+    the cache has no reason to pay it.
     """
+    from markitdown import MarkItDown
+
     if docintel_endpoint is not None:
         return MarkItDown(enable_plugins=False, docintel_endpoint=docintel_endpoint)
     return MarkItDown(enable_plugins=False)
@@ -255,12 +267,13 @@ def _required_env(name: str) -> str:
     return value
 
 
-def _with_front_matter(body: str, source: Path) -> str:
+def _with_front_matter(body: str, source: Path, label: str | None = None) -> str:
     size = source.stat().st_size
+    named = label if label is not None else str(source.resolve())
     header = "\n".join(
         [
             _FENCE,
-            f'source: "{_yaml_escape(str(source.resolve()))}"',
+            f'source: "{_yaml_escape(named)}"',
             f"converted_at: {datetime.now(UTC).isoformat(timespec='seconds')}",
             f"size_bytes: {size}",
             f"tool: {config.TOOL_NAME}",
