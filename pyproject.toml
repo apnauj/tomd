@@ -105,6 +105,12 @@ filterwarnings = [
     # starlette.testclient reaches a deprecated anyio alias while being imported.
     # Matched by exact message so every other DeprecationWarning stays fatal.
     "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+    # pydub, reached through markitdown's audio support, warns at import time on
+    # any machine without ffmpeg. Turning that into an error made every single
+    # conversion fail on the CI runners, because convert() catches everything.
+    # Audio conversion is the only feature that actually needs ffmpeg, and no
+    # test converts audio.
+    "ignore:Couldn't find ffmpeg or avconv:RuntimeWarning",
 ]
 
 [tool.coverage.run]
