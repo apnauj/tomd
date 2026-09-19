@@ -103,7 +103,7 @@ def create_app() -> FastAPI:
         limit = config.max_upload_bytes()
 
         with _temporary_copy(file, display_name, limit) as staged:
-            result = core.convert(staged, write=False, frontmatter=True)
+            result = core.convert(staged, write=False, frontmatter=True, source_label=display_name)
 
         return ConversionPayload(
             name=display_name,

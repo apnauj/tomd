@@ -190,3 +190,18 @@ def test_the_app_mounts_no_cors_middleware() -> None:
 
     # Assert
     assert not any("CORSMiddleware" in name for name in names)
+
+
+def test_front_matter_names_the_uploaded_file_not_the_staging_path(
+    client: TestClient, sample_pdf: Path
+) -> None:
+    # Arrange
+    payload = {"file": (sample_pdf.name, sample_pdf.read_bytes(), "application/pdf")}
+
+    # Act
+    response = client.post("/api/convert", files=payload)
+
+    # Assert
+    markdown = response.json()["markdown"]
+    assert 'source: "sample.pdf"' in markdown
+    assert "tomd-upload-" not in markdown
