@@ -23,8 +23,8 @@ import typer
 from rich.console import Console
 from typer.core import TyperGroup
 
-from tomd import __version__, core
 from tomd import cache as cache_store
+from tomd import core
 
 if TYPE_CHECKING:
     # typer vendors its own copy of click, so the context TyperGroup.parse_args
@@ -81,6 +81,9 @@ class _Tally:
 
 def _version(show: bool) -> None:
     if show:
+        # Imported here so the metadata lookup stays off the conversion path.
+        from tomd import __version__
+
         print(f"tomd {__version__}")
         raise typer.Exit
 
