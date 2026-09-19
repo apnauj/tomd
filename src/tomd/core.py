@@ -21,7 +21,7 @@ from typing import Final
 
 from markitdown import MarkItDown
 
-from tomd import config
+from tomd import cache, config
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ class ConversionResult:
 def convert(
     path: Path,
     out: Path | None = None,
-    use_cache: bool = True,  # noqa: ARG001 - wired up by the cache module
+    use_cache: bool = True,
     *,
     frontmatter: bool = True,
     write: bool = True,
@@ -112,8 +112,9 @@ def convert(
         out: Explicit destination. When ``None`` the document goes next to the
             source with a ``.md`` suffix, or into ``$TOMD_OUT_DIR`` when that is
             set.
-        use_cache: Reserved for the cache layer; every call currently performs a
-            fresh conversion.
+        use_cache: Reuse a previous conversion of the same content when one is
+            cached, and store the result otherwise. ``False`` forces MarkItDown
+            to run again.
         frontmatter: Prepend the YAML front matter block.
         write: Write the document to disk. ``False`` is what ``--stdout`` uses.
         docintel: Route the conversion through Azure Document Intelligence.
@@ -129,7 +130,17 @@ def convert(
     """
     started = time.perf_counter()
     try:
-        body = _run_markitdown(path, docintel=docintel, describe_images=describe_images)
+        _ensure_readable(path)
+        variant = _variant(docintel=docintel, describe_images=describe_images)
+        digest = cache.file_digest(path) if use_cache else None
+
+        body = cache.load(digest, variant) if digest is not None else None
+        from_cache = body is not None
+        if body is None:
+            body = _run_markitdown(path, docintel=docintel, describe_images=describe_images)
+            if digest is not None:
+                cache.store(digest, body, source=path, variant=variant)
+
         document = _with_front_matter(body, path) if frontmatter else body
         out_path = _write_document(document, path, out) if write else None
     except Exception as exc:  # the whole point of this function is to report, not raise
@@ -151,7 +162,7 @@ def convert(
         out_path=out_path,
         chars=len(body),
         words=len(body.split()),
-        cached=False,
+        cached=from_cache,
         duration_ms=_elapsed_ms(started),
         error=None,
     )
@@ -195,12 +206,24 @@ def default_out_path(source: Path) -> Path:
     return source.with_suffix(".md")
 
 
-def _run_markitdown(path: Path, *, docintel: bool, describe_images: bool) -> str:
+def _ensure_readable(path: Path) -> None:
     if not path.exists():
         raise FileNotFoundError(f"no such file: {path}")
     if path.is_dir():
         raise IsADirectoryError(f"{path} is a directory, not a file")
 
+
+def _variant(*, docintel: bool, describe_images: bool) -> str:
+    """Name the cache partition for a back end combination.
+
+    Document Intelligence and LLM image descriptions produce different Markdown
+    from the same bytes, so their results must not shadow the offline ones.
+    """
+    tags = [name for name, on in (("docintel", docintel), ("images", describe_images)) if on]
+    return "+".join(tags) if tags else cache.DEFAULT_VARIANT
+
+
+def _run_markitdown(path: Path, *, docintel: bool, describe_images: bool) -> str:
     endpoint = _required_env(ENV_DOCINTEL_ENDPOINT) if docintel else None
     if describe_images:
         _required_env(ENV_OPENAI_API_KEY)
