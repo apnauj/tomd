@@ -67,8 +67,8 @@ venv.bak/
 profile_default/
 ipython_config.py
 
-# uv
-uv.lock
+# uv (the lock file IS tracked: CI must resolve the same versions we develop against)
+.uv-cache/
 
 # tomd
 .tomd-cache/
