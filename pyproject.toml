@@ -39,7 +39,8 @@ dev = [
     "mypy>=1.10",
     "ruff>=0.5",
     "pre-commit>=3.7",
-    "httpx>=0.27",
+    # starlette.testclient deprecated plain httpx in favour of httpx2.
+    "httpx2>=0.28",
     "openpyxl>=3.1",
     "reportlab>=4.1",
     "python-docx>=1.1",
@@ -99,7 +100,12 @@ enable_error_code = ["redundant-expr", "truthy-bool", "ignore-without-code"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --strict-config"
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # starlette.testclient reaches a deprecated anyio alias while being imported.
+    # Matched by exact message so every other DeprecationWarning stays fatal.
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["tomd"]
