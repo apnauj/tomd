@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>tomd</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0c0c0e;
+    --surface: #131317;
+    --surface-raised: #191920;
+    --line: #26262e;
+    --text: #e9e7e4;
+    --muted: #8b8a92;
+    --accent: #d8a657;
+    --ok: #8fbf7f;
+    --bad: #e07a6a;
+    --radius: 10px;
+    --gap: clamp(20px, 4vw, 40px);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --bg: #faf9f7;
+      --surface: #ffffff;
+      --surface-raised: #f3f1ed;
+      --line: #e3e0d9;
+      --text: #1b1b1d;
+      --muted: #6d6b66;
+      --accent: #9a6b16;
+      --ok: #3f7a34;
+      --bad: #b2402c;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    padding: var(--gap);
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  main { max-width: 780px; margin: 0 auto; }
+
+  header { margin-bottom: clamp(32px, 6vw, 64px); }
+
+  h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  header p {
+    margin: 8px 0 0;
+    color: var(--muted);
+    max-width: 46ch;
+  }
+
+  #drop {
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    padding: clamp(32px, 7vw, 60px) 24px;
+    text-align: center;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  #drop p { margin: 0 0 20px; color: var(--muted); }
+
+  button {
+    font: inherit;
+    color: var(--text);
+    background: var(--surface-raised);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+  }
+
+  button:hover { border-color: var(--accent); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[disabled] { opacity: 0.45; cursor: default; }
+
+  .primary { background: transparent; border-color: var(--accent); color: var(--accent); }
+
+  #veil {
+    position: fixed;
+    inset: 0;
+    display: none;
+    place-items: center;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(2px);
+    z-index: 10;
+    font-size: 17px;
+    letter-spacing: 0.04em;
+  }
+
+  body.dragging #veil { display: grid; }
+  body.dragging #drop { border-color: var(--accent); }
+
+  #results { list-style: none; margin: 40px 0 0; padding: 0; }
+
+  .row {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+
+  .row-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 14px 16px;
+    flex-wrap: wrap;
+  }
+
+  .mark { width: 1em; flex: none; color: var(--muted); }
+  .row.ready .mark { color: var(--ok); }
+  .row.error .mark { color: var(--bad); }
+
+  .name { font-weight: 500; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: 13px; margin-left: auto; white-space: nowrap; }
+  .fail { flex-basis: 100%; color: var(--bad); font-size: 13px; overflow-wrap: anywhere; }
+
+  .actions { display: flex; gap: 8px; padding: 0 16px 14px; flex-wrap: wrap; }
+  .actions button { font-size: 13px; padding: 5px 12px; }
+
+  pre {
+    margin: 0;
+    padding: 16px;
+    border-top: 1px solid var(--line);
+    background: var(--surface-raised);
+    font: 12.5px/1.6 ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    white-space: pre;
+    overflow-x: auto;
+    max-height: 420px;
+  }
+
+  #bundle { margin-top: 24px; display: none; }
+  #bundle.shown { display: inline-block; }
+
+  footer { margin-top: 56px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="veil">Drop to convert</div>
+
+<main>
+  <header>
+    <h1>tomd</h1>
+    <p>Drop documents anywhere on this page to turn them into Markdown. Nothing leaves this machine.</p>
+  </header>
+
+  <section id="drop">
+    <p>PDF, Word, PowerPoint, Excel, CSV, HTML, images, audio.</p>
+    <button type="button" class="primary" id="pick">Choose files</button>
+    <input type="file" id="picker" multiple hidden />
+  </section>
+
+  <ul id="results"></ul>
+  <button type="button" id="bundle">Download all as .zip</button>
+
+  <footer id="limit"></footer>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  const results = document.getElementById("results");
+  const bundleButton = document.getElementById("bundle");
+  const picker = document.getElementById("picker");
+  const limitNote = document.getElementById("limit");
+  const PREVIEW_LINES = 40;
+
+  let maxUploadBytes = Infinity;
+  let dragDepth = 0;
+  const done = [];
+
+  fetch("/api/limits")
+    .then((response) => response.json())
+    .then((data) => {
+      maxUploadBytes = data.max_upload_bytes;
+      limitNote.textContent = `Up to ${Math.round(maxUploadBytes / 1048576)} MB per file.`;
+    })
+    .catch(() => { limitNote.textContent = ""; });
+
+  document.getElementById("pick").addEventListener("click", () => picker.click());
+  picker.addEventListener("change", () => {
+    enqueue(Array.from(picker.files));
+    picker.value = "";
+  });
+
+  // Counting enter/leave events keeps the veil steady: moving the pointer over a
+  // child element fires a leave for the parent that would otherwise hide it.
+  window.addEventListener("dragenter", (event) => {
+    event.preventDefault();
+    dragDepth += 1;
+    document.body.classList.add("dragging");
+  });
+  window.addEventListener("dragover", (event) => event.preventDefault());
+  window.addEventListener("dragleave", () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) document.body.classList.remove("dragging");
+  });
+  window.addEventListener("drop", (event) => {
+    event.preventDefault();
+    dragDepth = 0;
+    document.body.classList.remove("dragging");
+    enqueue(Array.from(event.dataTransfer.files));
+  });
+
+  async function enqueue(files) {
+    for (const file of files) {
+      const row = addRow(file.name);
+      if (file.size > maxUploadBytes) {
+        fail(row, `Larger than the ${Math.round(maxUploadBytes / 1048576)} MB limit.`);
+        continue;
+      }
+      await convert(file, row);
+    }
+  }
+
+  async function convert(file, row) {
+    setState(row, "working", "Converting…");
+    const body = new FormData();
+    body.append("file", file);
+
+    try {
+      const response = await fetch("/api/convert", { method: "POST", body });
+      const payload = await response.json();
+      if (!response.ok) {
+        fail(row, payload.detail || `Server returned ${response.status}.`);
+        return;
+      }
+      if (payload.error) {
+        fail(row, payload.error);
+        return;
+      }
+      succeed(row, payload);
+    } catch (error) {
+      fail(row, error.message || "The request failed.");
+    }
+  }
+
+  function addRow(name) {
+    const row = document.createElement("li");
+    row.className = "row";
+    row.innerHTML = `
+      <div class="row-head">
+        <span class="mark">·</span>
+        <span class="name"></span>
+        <span class="meta">Pending</span>
+        <span class="fail" hidden></span>
+      </div>`;
+    row.querySelector(".name").textContent = name;
+    results.append(row);
+    return row;
+  }
+
+  function setState(row, state, meta) {
+    row.classList.remove("ready", "error");
+    if (state !== "working") row.classList.add(state);
+    row.querySelector(".mark").textContent =
+      state === "ready" ? "✓" : state === "error" ? "✗" : "·";
+    row.querySelector(".meta").textContent = meta;
+  }
+
+  function fail(row, message) {
+    setState(row, "error", "Failed");
+    const note = row.querySelector(".fail");
+    note.textContent = message;
+    note.hidden = false;
+  }
+
+  function succeed(row, payload) {
+    const seconds = (payload.duration_ms / 1000).toFixed(2);
+    setState(row, "ready", `${payload.words} words · ${payload.cached ? "cached" : seconds + "s"}`);
+    done.push({ name: markdownName(payload.name), markdown: payload.markdown });
+    bundleButton.classList.toggle("shown", done.length > 1);
+    row.append(buildActions(row, payload));
+  }
+
+  function buildActions(row, payload) {
+    const actions = document.createElement("div");
+    actions.className = "actions";
+
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.textContent = "Copy Markdown";
+    copy.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(payload.markdown);
+      copy.textContent = "Copied";
+      setTimeout(() => { copy.textContent = "Copy Markdown"; }, 1400);
+    });
+
+    const download = document.createElement("button");
+    download.type = "button";
+    download.textContent = "Download .md";
+    download.addEventListener("click", () => {
+      save(new Blob([payload.markdown], { type: "text/markdown" }), markdownName(payload.name));
+    });
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.textContent = "Preview";
+    toggle.addEventListener("click", () => {
+      const existing = row.querySelector("pre");
+      if (existing) {
+        existing.remove();
+        toggle.textContent = "Preview";
+        return;
+      }
+      const lines = payload.markdown.split("\n");
+      const preview = document.createElement("pre");
+      preview.textContent = lines.slice(0, PREVIEW_LINES).join("\n") +
+        (lines.length > PREVIEW_LINES ? `\n\n… ${lines.length - PREVIEW_LINES} more lines` : "");
+      row.append(preview);
+      toggle.textContent = "Hide preview";
+    });
+
+    actions.append(copy, download, toggle);
+    return actions;
+  }
+
+  bundleButton.addEventListener("click", async () => {
+    bundleButton.disabled = true;
+    try {
+      const response = await fetch("/api/bundle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documents: done }),
+      });
+      if (!response.ok) throw new Error(`Server returned ${response.status}.`);
+      save(await response.blob(), "tomd-documents.zip");
+    } catch (error) {
+      limitNote.textContent = error.message;
+    } finally {
+      bundleButton.disabled = false;
+    }
+  });
+
+  function markdownName(name) {
+    return name.replace(/\.[^.]+$/, "") + ".md";
+  }
+
+  function save(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+})();
+</script>
+</body>
+</html>
