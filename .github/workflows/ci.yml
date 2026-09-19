@@ -1,0 +1,50 @@
+name: CI
+
+# develop and main are the branches the acceptance criteria name. The feature,
+# release and hotfix prefixes are here too because the review flow stacks pull
+# requests onto feature branches: without them a stacked PR would report no
+# checks at all until it reached develop.
+on:
+  push:
+    branches: [main, develop, "feature/**", "release/**", "hotfix/**"]
+  pull_request:
+    branches: [main, develop, "feature/**", "release/**"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install the project
+        # --locked fails rather than silently re-resolving: CI must test the
+        # dependency versions that were developed against.
+        run: uv sync --locked --python ${{ matrix.python-version }}
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Type check
+        run: uv run mypy
+
+      - name: Test
+        run: uv run pytest --cov=tomd --cov-report=term-missing --cov-fail-under=85
