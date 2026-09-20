@@ -53,9 +53,12 @@ its own line with the reason.
 converted once; editing a file produces a new entry. The cache lives in
 `~/.cache/tomd`.
 
-**Two sources cannot share one destination.** `report.pdf` and `report.docx` in
-one directory both want `report.md`, so the second is refused rather than
-silently overwriting the first. Use `-o`, or `$TOMD_OUT_DIR`.
+**Two sources never share one destination.** `report.pdf` and `report.docx` in
+one directory both want `report.md`. The first takes it; the second keeps its
+own extension in the name and becomes `report.docx.md`, and the line tells you
+so. Two files with identical full names — the same document from two folders,
+collected into one `$TOMD_OUT_DIR` — get a numeric suffix after that. Nothing is
+ever overwritten without being reported.
 
 ### Optional back ends
 
@@ -121,7 +124,12 @@ history shows where each piece of work began and ended.
 | `develop` | `main` | — | Integration. Never committed to directly. |
 | `feature/<name>` | `develop` | `develop` | One block of work. |
 | `release/<version>` | `develop` | `main` and `develop` | Version bump and final docs; fixes only. |
-| `hotfix/<name>` | `main` | `main` and `develop` | Urgent fix against a release. |
+
+There is no `hotfix` lane. It exists in gitflow to patch a production release
+without waiting for whatever is half-finished on `develop`, and that pressure
+does not exist here: this is a local tool with one user, and an urgent fix can
+go through a normal feature branch and a short release. Reintroducing the lane
+is worth it only once `main` is serving somebody other than you.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org)
 (`feat:`, `fix:`, `test:`, `refactor:`, `chore:`, `docs:`), written in English

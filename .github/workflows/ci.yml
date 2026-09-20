@@ -1,12 +1,10 @@
 name: CI
 
-# develop and main are the branches the acceptance criteria name. The feature,
-# release and hotfix prefixes are here too because the review flow stacks pull
-# requests onto feature branches: without them a stacked PR would report no
-# checks at all until it reached develop.
+# develop and main are the branches that must stay green. feature and release
+# are here so a branch is checked before it is merged rather than after.
 on:
   push:
-    branches: [main, develop, "feature/**", "release/**", "hotfix/**"]
+    branches: [main, develop, "feature/**", "release/**"]
   pull_request:
     branches: [main, develop, "feature/**", "release/**"]
 
