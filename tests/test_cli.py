@@ -32,12 +32,19 @@ def _result(
     words: int = 12,
     cached: bool = False,
     error: str | None = None,
+    out_path: Path | None = None,
 ) -> core.ConversionResult:
-    """Build a ConversionResult without going near MarkItDown."""
+    """Build a ConversionResult without going near MarkItDown.
+
+    ``out_path`` mirrors what the real convert() does with the destination it is
+    handed; a stub that always reports the default name would hide a CLI that
+    picked the wrong one.
+    """
+    written = out_path if out_path is not None else source.with_suffix(".md")
     return core.ConversionResult(
         source=source,
         markdown="" if error else "---\ntool: tomd\n---\n\n# converted\n",
-        out_path=None if error else source.with_suffix(".md"),
+        out_path=None if error else written,
         chars=0 if error else 40,
         words=0 if error else words,
         cached=cached,
@@ -259,19 +266,62 @@ def test_a_pattern_matching_nothing_is_reported_and_fails(
 
 @pytest.mark.usefixtures("fake_convert")
 def test_two_sources_wanting_the_same_destination_do_not_overwrite_each_other(
-    runner: CliRunner, tmp_path: Path
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Arrange
     (tmp_path / "report.pdf").write_bytes(b"x")
     (tmp_path / "report.docx").write_bytes(b"x")
+    written: list[Path | None] = []
+
+    def stub(path: Path, **kwargs: object) -> core.ConversionResult:
+        out = kwargs.get("out")
+        assert out is None or isinstance(out, Path)
+        written.append(out)
+        return _result(path, out_path=out)
+
+    monkeypatch.setattr(core, "convert", stub)
 
     # Act
     result = runner.invoke(cli.app, [str(tmp_path), "-r"])
 
     # Assert
-    assert result.exit_code == 1
-    assert "would overwrite" in result.stdout
-    assert "1 converted, 0 cached, 1 failed" in result.stdout
+    assert result.exit_code == 0
+    assert written == [tmp_path / "report.md", tmp_path / "report.pdf.md"]
+    assert "→ report.pdf.md" in result.stdout
+
+
+@pytest.mark.usefixtures("fake_convert")
+def test_identical_names_from_different_directories_get_a_numeric_suffix(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    for folder in ("january", "february", "march"):
+        directory = tmp_path / folder
+        directory.mkdir()
+        (directory / "report.pdf").write_bytes(b"x")
+
+    collected = tmp_path / "collected"
+    monkeypatch.setenv("TOMD_OUT_DIR", str(collected))
+    written: list[Path | None] = []
+
+    def stub(path: Path, **kwargs: object) -> core.ConversionResult:
+        out = kwargs.get("out")
+        assert out is None or isinstance(out, Path)
+        written.append(out)
+        return _result(path, out_path=out)
+
+    monkeypatch.setattr(core, "convert", stub)
+
+    # Act
+    result = runner.invoke(cli.app, [str(tmp_path), "-r"])
+
+    # Assert
+    assert result.exit_code == 0
+    assert written == [
+        collected / "report.md",
+        collected / "report.pdf.md",
+        collected / "report-2.pdf.md",
+    ]
 
 
 @pytest.mark.usefixtures("fake_convert")

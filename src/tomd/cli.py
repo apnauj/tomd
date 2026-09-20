@@ -173,15 +173,14 @@ def convert(
 
     claimed: dict[Path, Path] = {}
     for target in targets:
-        collision = _claim(target, out=out, writing=not to_stdout, claimed=claimed)
-        if collision is not None:
-            tally.failed += 1
-            _report_failure(collision, as_json=as_json, console=status)
-            continue
+        destination = _claim(target, out=out, writing=not to_stdout, claimed=claimed)
+        renamed = (
+            out is None and destination is not None and destination != core.default_out_path(target)
+        )
 
         result = core.convert(
             target,
-            out=out,
+            out=destination,
             use_cache=not no_cache,
             frontmatter=not no_frontmatter,
             write=not to_stdout,
@@ -195,7 +194,7 @@ def convert(
         else:
             if to_stdout and result.ok:
                 print(result.markdown, end="" if result.markdown.endswith("\n") else "\n")
-            status.print(_render(result))
+            status.print(_render(result, renamed=renamed))
 
     if not as_json and len(targets) + len(rejected) > 1:
         status.print(f"[dim]{tally.line()}[/dim]")
@@ -296,12 +295,15 @@ def _resolve(paths: list[str], *, recursive: bool) -> tuple[list[Path], list[str
 
 def _claim(
     target: Path, *, out: Path | None, writing: bool, claimed: dict[Path, Path]
-) -> str | None:
-    """Reserve a destination, refusing one that this run already wrote.
+) -> Path | None:
+    """Reserve a destination, stepping aside from one this run already wrote.
 
     ``report.pdf`` and ``report.docx`` in one directory both want ``report.md``.
-    Converting them in the same run would leave whichever finished last and
-    silently lose the other, so the second is reported as a failure instead.
+    Whichever finished last would win and the other conversion would be lost
+    without a word, so the second file keeps its own extension in the name:
+    ``report.docx`` becomes ``report.docx.md``. Two sources with identical full
+    names - the same document in two directories, converted into one
+    ``$TOMD_OUT_DIR`` - get a numeric suffix after that.
 
     Args:
         target: File about to be converted.
@@ -310,22 +312,25 @@ def _claim(
         claimed: Destinations already taken, mapped to the file that took them.
 
     Returns:
-        ``None`` when the destination is free, otherwise a message naming the
-        clash.
+        The path to write to, or ``None`` when this run writes nothing.
     """
     if not writing:
         return None
 
-    destination = out if out is not None else core.default_out_path(target)
-    previous = claimed.get(destination)
-    if previous is not None:
-        return (
-            f"{target}: would overwrite {destination}, already written from {previous.name} "
-            f"in this run; use -o or $TOMD_OUT_DIR"
-        )
+    preferred = out if out is not None else core.default_out_path(target)
+    if preferred not in claimed:
+        claimed[preferred] = target
+        return preferred
 
-    claimed[destination] = target
-    return None
+    alternative = preferred.with_name(f"{target.name}.md")
+    attempt = 2
+    while alternative in claimed:
+        alternative = preferred.with_name(f"{target.stem}-{attempt}{target.suffix}.md")
+        attempt += 1
+
+    logger.info("%s would overwrite %s, writing %s instead", target, preferred, alternative)
+    claimed[alternative] = target
+    return alternative
 
 
 def _tally(result: core.ConversionResult, tally: _Tally) -> None:
@@ -337,11 +342,16 @@ def _tally(result: core.ConversionResult, tally: _Tally) -> None:
         tally.converted += 1
 
 
-def _render(result: core.ConversionResult) -> str:
+def _render(result: core.ConversionResult, *, renamed: bool = False) -> str:
     if not result.ok:
         return f"[red]✗[/red] {result.source} [red]{result.error}[/red]"
+
     detail = "cached" if result.cached else f"{result.duration_ms / 1000:.2f}s"
-    return f"[green]✓[/green] {result.source} [dim]{result.words} words · {detail}[/dim]"
+    line = f"[green]✓[/green] {result.source} [dim]{result.words} words · {detail}[/dim]"
+    if renamed and result.out_path is not None:
+        # The obvious name was taken, so say where the document actually went.
+        line += f" [dim]→ {result.out_path.name}[/dim]"
+    return line
 
 
 def _report_failure(message: str, *, as_json: bool, console: Console) -> None:
