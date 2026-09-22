@@ -14,14 +14,19 @@ cp -r integrations/claude-code/pdf-to-markdown ~/.claude/skills/
 
 ## 2. The CLAUDE.md block
 
-Paste this into `~/.claude/CLAUDE.md`:
+The skill above already covers this, and a global rule is the riskier way to say
+it: an unconditional "convert these formats" line competes with the skills that
+*create* Word documents, decks and spreadsheets, and can turn a request for a
+.docx into a .md. Paste this only if you want the behaviour stated globally as
+well, and note the second sentence, which is what keeps it in its lane:
 
 ```markdown
-## Non-text files
+## Reading non-text files
 
-Any file that is not plain text - PDF, DOCX, PPTX, XLSX, images, audio - must be
-converted before being read: `tomd "<path>" --stdout`, or `tomd "<path>"` for a
-large one, then read the `.md` it writes. Never open these formats with a text
-reader and never guess at their contents.
-If `tomd` is missing, say so instead of falling back to another tool.
+To read what an existing PDF, Word, PowerPoint, Excel, image or audio file says,
+convert it first: `tomd "<path>" --stdout`, or `tomd "<path>"` for a large one,
+then read the `.md` it writes. This is for reading only - when the task is to
+create or edit a file in one of those formats, use that format's own skill and
+do not substitute Markdown. If `tomd` is missing, say so rather than falling
+back to another tool.
 ```

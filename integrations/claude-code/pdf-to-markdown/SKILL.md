@@ -1,12 +1,31 @@
 ---
 name: pdf-to-markdown
-description: Read the contents of a non-text file the user attached or named - PDF, DOCX, PPTX, XLSX, XLS, CSV, EPUB, MSG, a scanned or photographed image (PNG, JPG), or audio (MP3, WAV, M4A) - by converting it to Markdown with the local `tomd` command first. Use whenever answering needs what is inside such a file: summarising a PDF, pulling figures out of a spreadsheet, quoting a contract, reading slides, or transcribing a recording. Do not open these formats with a text reader; their bytes are not text.
+description: Extract the text of an existing binary document so it can be read in the conversation - a PDF, Word, PowerPoint or Excel file, an EPUB, an .msg email, a scanned or photographed page, or an audio recording - by running the local `tomd` command on it. Use only when the user points at a file that already exists and the answer depends on what is inside it: summarising a report, quoting a contract, pulling figures out of a sheet, reading slides, transcribing a recording. Do NOT use this skill to create, generate, write, edit, fill in or export a file in any of those formats - producing a .docx, .pptx, .xlsx or .pdf is the job of that format's own skill, and this skill must never turn such a request into Markdown instead.
 ---
 
-# Reading non-text files with tomd
+# Reading an existing document with tomd
 
-`tomd` wraps MarkItDown locally. It turns binary documents into Markdown so their
-contents can be read like any other text.
+`tomd` wraps MarkItDown locally. It turns a binary document into Markdown **text
+for reading**, so its contents can be quoted, summarised and searched.
+
+## When not to use this
+
+This skill answers "what does this file say". It has nothing to do with "make me
+one of these".
+
+| The user wants | Use |
+| --- | --- |
+| A Word document written, edited or filled in | the `docx` skill |
+| A slide deck built or modified | the `pptx` skill |
+| A spreadsheet created, cleaned or calculated | the `xlsx` skill |
+| A PDF produced, merged, split or form-filled | the `pdf` skill |
+| To know what an existing file **says** | this skill |
+
+If the request is to *produce* a document, producing Markdown instead is a wrong
+answer, not a convenient one. Hand the task to the skill that owns the format.
+
+Plain text files — `.txt`, `.md`, `.csv`, `.json`, source code — need none of
+this. Read them directly.
 
 ## One file
 
@@ -69,4 +88,5 @@ from its name. Say that the file cannot be read until `tomd` is available.
 - Every converted document starts with a YAML front matter block recording the
   source path, the conversion time and the size. It is metadata, not content.
   Pass `--no-frontmatter` to omit it.
-- `.md` files are never converted into themselves; read those directly.
+- When several documents in one directory share a name, the first takes
+  `report.md` and the next becomes `report.docx.md`; the output says so.

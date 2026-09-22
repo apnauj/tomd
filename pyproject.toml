@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tomd"
-version = "0.1.1"
+version = "0.1.2"
 description = "Local wrapper around MarkItDown: convert documents, images and audio to Markdown"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 authors = [{ name = "Juan Pablo Alzate" }]
 keywords = ["markdown", "markitdown", "pdf", "docx", "conversion"]
 classifiers = [
