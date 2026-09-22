@@ -6,11 +6,38 @@ terminal, from a small web page, and from Claude Code.
 
 ## Install
 
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and
+Python 3.11 or newer. uv fetches the Python it needs, so nothing else has to be
+installed first.
+
 ```bash
+uv tool install --with 'markitdown[all]' git+https://github.com/apnauj/tomd
+```
+
+That is the whole installation: `tomd` is now on your `PATH` and works from any
+directory. Check it with `tomd --version`. tomd is not published to PyPI — it is
+installed straight from this repository.
+
+`--with 'markitdown[all]'` is not optional. Without it MarkItDown installs
+without its format extras, and PDFs, Word documents and spreadsheets fail with a
+missing-dependency error instead of converting.
+
+<details>
+<summary>Installing from a clone, for development</summary>
+
+```bash
+git clone https://github.com/apnauj/tomd
+cd tomd
 uv tool install --with 'markitdown[all]' .
 ```
 
-`tomd` is then on your `PATH` from any directory.
+The trailing `.` means "the package in this directory", so this only works from
+inside the clone. See [Development](#development) for the test and lint commands.
+
+</details>
+
+To update, re-run the install command with `--force`. To remove it entirely:
+`uv tool uninstall tomd`.
 
 > The first conversion after installing can take twenty seconds or so on macOS
 > while Gatekeeper scans the freshly written native libraries. It is a one-time
@@ -96,7 +123,7 @@ The host the web UI binds to is deliberately **not** configurable.
 
 ```bash
 uv sync                  # create the environment, dev dependencies included
-uv run pytest            # the whole suite
+uv run pytest            # the whole suite: 74 tests, 95% coverage
 uv run pytest --cov=tomd --cov-report=term-missing
 uv run ruff check .      # lint
 uv run ruff format .     # format
